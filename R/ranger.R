@@ -390,7 +390,7 @@ ranger <- function(formula = NULL, data = NULL, num.trees = 500, mtry = NULL,
     stop("Error: Invalid value for num.threads")
   }
   
-  ## Minumum node size
+  ## Minimum node size
   if (is.null(min.node.size)) {
     min.node.size <- 0
   } else if (!is.numeric(min.node.size) || min.node.size < 0) {
@@ -519,6 +519,8 @@ ranger <- function(formula = NULL, data = NULL, num.trees = 500, mtry = NULL,
     }
   } else if (splitrule == "extratrees") {
     splitrule.num <- 5
+  } else if (splitrule == "cmismatch") {
+    splitrule.num <- 6
   } else {
     stop("Error: Unknown splitrule.")
   }

@@ -5,3 +5,10 @@ ranger.Rcheck/
 *.Rproj
 .project
 .cproject
+src/.vs/src/v15/ipch/AutoPCH/93bb0207/TREEREGRESSION-815f59a4/TREEREGRESSION.ipch
+src/.vs/src/v15/ipch/AutoPCH/93bb0207/MAIN-1022077c/MAIN.ipch
+src/.vs/src/v15/Browse.VC.db
+src/.vs/src/v15/.suo
+src/.vs/slnx.sqlite
+src/.vs/VSWorkspaceState.json
+src/.vs/ProjectSettings.json

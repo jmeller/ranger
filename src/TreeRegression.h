@@ -45,6 +45,8 @@ public:
   void initInternal();
 
   double estimate(size_t nodeID);
+  double estimateQ(size_t nodeID);
+  
   void computePermutationImportanceInternal(std::vector<std::vector<size_t>>* permutations);
   void appendToFileInternal(std::ofstream& file);
 
@@ -64,6 +66,12 @@ private:
   double computePredictionAccuracyInternal();
 
   // Called by splitNodeInternal(). Sets split_varIDs and split_values.
+  bool findBestSplitCMismatch(size_t nodeID, std::vector<size_t>& possible_split_varIDs);
+  void findBestSplitValueCMismatchSmallQ(size_t nodeID, size_t varID, double sum_node, size_t num_samples_node,
+      double& best_value, size_t& best_varID, double& best_decrease);
+  void findBestSplitValueCMismatchUnordered(size_t nodeID, size_t varID, double sum_node, size_t num_samples_node,
+      double& best_value, size_t& best_varID, double& best_decrease);
+  
   bool findBestSplit(size_t nodeID, std::vector<size_t>& possible_split_varIDs);
   void findBestSplitValueSmallQ(size_t nodeID, size_t varID, double sum_node, size_t num_samples_node,
       double& best_value, size_t& best_varID, double& best_decrease);

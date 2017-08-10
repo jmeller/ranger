@@ -76,6 +76,27 @@ double TreeRegression::estimate(size_t nodeID) {
   return (sum_responses_in_node / (double) num_samples_in_node);
 }
 
+double TreeRegression::estimateQ(size_t nodeID) {
+
+//double c_underage = alpha_sl;
+//double c_overage = 1 - alpha_sl;
+//double c_overage = 0.05;
+//double c_underage = 0.95;
+size_t num_samples_in_node = sampleIDs[nodeID].size();
+//double alpha_sl = c_underage / (c_overage + c_underage);
+int alpha_idx = ceil(alpha*num_samples_in_node) - 1;
+double observations[num_samples_in_node];
+double q = 0;
+  
+  // Get all demand observations and calculate NV quantity
+  for (size_t i = 0; i < sampleIDs[nodeID].size(); ++i) {
+	  observations[i] = data->get(sampleIDs[nodeID][i], dependent_varID);
+  }
+  std::sort(observations, observations + num_samples_in_node);
+  q = observations[alpha_idx];
+  return q;
+}
+
 void TreeRegression::appendToFileInternal(std::ofstream& file) { // #nocov start
 // Empty on purpose
 } // #nocov end
@@ -84,7 +105,13 @@ bool TreeRegression::splitNodeInternal(size_t nodeID, std::vector<size_t>& possi
 
 // Check node size, stop if maximum reached
   if (sampleIDs[nodeID].size() <= min_node_size) {
-    split_values[nodeID] = estimate(nodeID);
+	  //debug
+	  //std::cout << "[TreeRegression::splitNodeInternal] Abort due to node_size\n";
+    if(splitrule == CMISMATCH){
+		split_values[nodeID] = estimateQ(nodeID);
+	} else {
+		split_values[nodeID] = estimate(nodeID);
+	}
     return true;
   }
 
@@ -100,6 +127,7 @@ bool TreeRegression::splitNodeInternal(size_t nodeID, std::vector<size_t>& possi
     pure_value = value;
   }
   if (pure) {
+	  //std::cout << "[TreeRegression::splitNodeInternal] Abort due to pureness\n";
     split_values[nodeID] = pure_value;
     return true;
   }
@@ -107,15 +135,25 @@ bool TreeRegression::splitNodeInternal(size_t nodeID, std::vector<size_t>& possi
   // Find best split, stop if no decrease of impurity
   bool stop;
   if (splitrule == MAXSTAT) {
+	  //std::cout << "[TreeRegression::splitNodeInternal] Go to Maxstat\n";
     stop = findBestSplitMaxstat(nodeID, possible_split_varIDs);
   } else if (splitrule == EXTRATREES) {
+	  //std::cout << "[TreeRegression::splitNodeInternal] Go to ExtraTrees\n";
     stop = findBestSplitExtraTrees(nodeID, possible_split_varIDs);
+  } else if (splitrule == CMISMATCH) {
+	  //std::cout << "[TreeRegression::splitNodeInternal] Go to CMismatch\n";
+	  stop = findBestSplitCMismatch(nodeID, possible_split_varIDs);
   } else {
+	  //std::cout << "[TreeRegression::splitNodeInternal] Go to Default\n";
     stop = findBestSplit(nodeID, possible_split_varIDs);
   }
 
   if (stop) {
-    split_values[nodeID] = estimate(nodeID);
+    if(splitrule == CMISMATCH){
+		split_values[nodeID] = estimateQ(nodeID);
+	} else {
+		split_values[nodeID] = estimate(nodeID);
+	}
     return true;
   }
 
@@ -139,6 +177,312 @@ double TreeRegression::computePredictionAccuracyInternal() {
     }
   }
   return (1.0 - sum_of_squares / (double) num_predictions);
+}
+
+bool TreeRegression::findBestSplitCMismatch(size_t nodeID, std::vector<size_t>& possible_split_varIDs) {
+
+  size_t num_samples_node = sampleIDs[nodeID].size();
+  double best_decrease = -1;
+  size_t best_varID = 0;
+  double best_value = 0;
+  double mismatch_costs = 0;
+  double c_overage = 1 - alpha;
+  double c_underage = alpha;
+  //double alpha_sl = c_underage / (c_overage + c_underage);
+  int alpha_idx = ceil(alpha*num_samples_node) - 1;
+  std::vector<double> observations{};
+  //double observations[num_samples_node];
+  double q = 0;
+
+  //debug
+  //std::cout << "alpha: " << alpha << '\n';
+  //std::cout << "num_samples_node: " << num_samples_node << '\n';
+  //std::cout << "node_id: " << nodeID << '\n';
+  // Compute sum of responses in node
+    /*
+  double sum_node = 0;
+  for (auto& sampleID : sampleIDs[nodeID]) {
+    sum_node += data->get(sampleID, dependent_varID);
+  }*/
+  
+  // Get all demand observations and calculate NV quantity for parent node
+  for (size_t i = 0; i < sampleIDs[nodeID].size(); ++i) {
+	  observations.push_back(data->get(sampleIDs[nodeID][i], dependent_varID));
+	  //observations[i] = data->get(sampleIDs[nodeID][i], dependent_varID);
+  }
+  std::sort(observations.begin(), observations.end());
+  q = observations[alpha_idx];
+  //std::cout << "q node: " << q << '\n';
+  //std::cout << "Observations & mismatch: " << '\n';
+  // Calculate mismatch costs
+  for (size_t i = 0; i < observations.size(); ++i) {
+	  //std::cout << "observation["<< i << "]: " << observations[i] << ' ';
+	  if(observations[i] < q){
+		  mismatch_costs += c_overage * (q - observations[i]);
+		  //debug
+		  //std::cout << "c_overage: " << c_overage << ' ';
+		  //std::cout << "difference: " << (q - observations[i]) << ' ';
+		  //std::cout << "add mismatch: " << c_overage * (q - observations[i]) << '\n';
+	  } else {
+		  mismatch_costs += c_underage * (observations[i] - q);
+		  //debug
+		  //std::cout << "c_underage: " << c_underage << ' ';
+		  //std::cout << "difference: " << (observations[i] - q) << ' ';
+		  //std::cout << "add mismatch: " << c_underage * (observations[i] - q) << '\n';
+	  }
+  }
+  //std::cout << "mismatch node: " << mismatch_costs << '\n';
+  //std::cout << "num_possible_split_variables: " << possible_split_varIDs.size() << '\n';
+  // For all possible split variables
+  for (auto& varID : possible_split_varIDs) {
+
+  //std::cout << "test VarID: " << varID << '\n';
+    // Find best split value, if ordered consider all values as split values, else all 2-partitions
+    if ((*is_ordered_variable)[varID]) {
+
+	std::cout << "varID is ordered" << '\n';
+      // Use memory saving method if option set
+      //if (memory_saving_splitting) {
+        findBestSplitValueCMismatchSmallQ(nodeID, varID, mismatch_costs, num_samples_node, best_value, best_varID, best_decrease);
+      /*} else {
+        // Use faster method for both cases
+        double q = (double) num_samples_node / (double) data->getNumUniqueDataValues(varID);
+        if (q < Q_THRESHOLD) {
+          findBestSplitValueCMismatchSmallQ(nodeID, varID, mismatch_costs, num_samples_node, best_value, best_varID, best_decrease);
+        } else {
+          findBestSplitValueCMismatchLargeQ(nodeID, varID, mismatch_costs, num_samples_node, best_value, best_varID, best_decrease);
+        }
+      }*/
+    } else {
+		std::cout << "varID is unordered" << '\n';
+      findBestSplitValueCMismatchUnordered(nodeID, varID, mismatch_costs, num_samples_node, best_value, best_varID, best_decrease);
+    }
+  }
+
+// Stop if no good split found
+  if (best_decrease < 0) {
+    return true;
+  }
+
+// Save best values
+  split_varIDs[nodeID] = best_varID;
+  split_values[nodeID] = best_value;
+
+// Compute decrease of impurity for this node and add to variable importance if needed
+  if (importance_mode == IMP_GINI) {
+    addImpurityImportance(nodeID, best_varID, best_decrease);
+  }
+  return false;
+}
+
+void TreeRegression::findBestSplitValueCMismatchSmallQ(size_t nodeID, size_t varID, double mismatch_costs, size_t num_samples_node,
+    double& best_value, size_t& best_varID, double& best_decrease) {
+	
+  // Create possible split values
+  std::vector<double> possible_split_values;
+  data->getAllValues(possible_split_values, sampleIDs[nodeID], varID);
+  
+  //std::cout << "[TreeRegression::findBestSplitValueCMismatchSmallQ] num_possible_split_values: " << possible_split_values.size() << '\n';
+
+  // Try next variable if all equal for this
+  if (possible_split_values.size() < 2) {
+    return;
+  }
+
+  // Initialize with 0 if not in memory efficient mode, use pre-allocated space
+  // -1 because no split possible at largest value
+  size_t num_splits = possible_split_values.size() - 1;
+  /*
+  double* cost_right;
+  double* cost_left;
+  size_t* n_right;
+  size_t* n_left;
+  */
+  double cost_right[num_splits];
+  double cost_left[num_splits];
+  double n_right[num_splits];
+  double n_left[num_splits];
+  double c_overage;
+  double c_underage;
+
+	c_underage = alpha;
+	c_overage = 1 - alpha;
+    /*
+	cost_right = sums;
+    n_right = counter;
+	cost_left = sums;
+    n_left = counter;
+    std::fill(cost_left, cost_left + num_splits, 0);
+    std::fill(n_left, n_left + num_splits, 0);
+	std::fill(cost_right, cost_right + num_splits, 0);
+    std::fill(n_right, n_right + num_splits, 0);
+	*/
+
+  // Observations and cost in possible split
+  for (size_t i = 0; i < num_splits; ++i) {
+	  std::vector<double> observations_right{};
+	  std::vector<double> observations_left{};
+	  n_right[i] = 0;
+	  n_left[i] = 0;
+	  cost_right[i] = 0;
+	  cost_left[i] = 0;
+	  
+	  // Split observations into subtrees
+	  for (auto& sampleID : sampleIDs[nodeID]) {
+		  double value = data->get(sampleID, varID);
+		  double response = data->get(sampleID, dependent_varID);
+		  
+		  //debug
+		  //std::cout << "x value: " << value << "poss split value: " << possible_split_values[i] << " response: " << response << ' ';
+		  if (value > possible_split_values[i]) {
+			observations_right.push_back(response);
+			//++n_right[i];
+			++n_right[i];
+		  } else {
+			observations_left.push_back(response);
+			++n_left[i];
+		  }
+	  }
+	  
+	  // Determine outcomes
+	  std::sort(observations_left.begin(), observations_left.end());
+	  std::sort(observations_right.begin(), observations_right.end());
+	  int alpha_idx_left = ceil(alpha * n_left[i]) - 1;
+	  int alpha_idx_right = ceil(alpha * n_right[i]) - 1;
+	  //std::cout << "alpha_idx_left: " << alpha_idx_left << '\n';
+	  //std::cout << "alpha_idx_right: " << alpha_idx_right << '\n';
+	  
+	  double q_left = observations_left[alpha_idx_left];
+	  double q_right = observations_right[alpha_idx_right];
+	  
+	  // Calculate mismatch costs
+	  for (auto& observationL : observations_left) {
+		  if(observationL < q_left){
+			cost_left[i] += c_overage * (q_left - observationL);
+			//debug
+		  //std::cout << "[L] c_overage: " << c_overage << ' ';
+		  //std::cout << "[L] difference: " << (q_left - observationL) << ' ';
+		  //std::cout << "[L] add mismatch: " << c_overage * (q_left - observationL) << '\n';
+		  } else {
+			cost_left[i] += c_underage * (observationL - q_left);
+			// debug
+			//std::cout << "[L] c_underage: " << c_underage << ' ';
+			//std::cout << "[L] difference: " << (observationL - q_left) << ' ';
+			//std::cout << "[L] add mismatch: " << c_underage * (observationL - q_left) << '\n';
+		  }
+	  }
+	  for (auto& observationR : observations_right) {
+		  if(observationR < q_right){
+			cost_right[i] += c_overage * (q_right - observationR);
+			//debug
+		  //std::cout << "[R] c_overage: " << c_overage << ' ';
+		  //std::cout << "[R] difference: " << (q_right - observationR) << ' ';
+		  //std::cout << "[R] add mismatch: " << c_overage * (q_right - observationR) << '\n';
+		  } else {
+			cost_right[i] += c_underage * (observationR - q_right);
+			//std::cout << "[R] c_underage: " << c_underage << ' ';
+			//std::cout << "[R] difference: " << (observationR - q_right) << ' ';
+			//std::cout << "[R] add mismatch: " << c_underage * (observationR - q_right) << '\n';
+		  }
+	  }
+
+	//debug
+	//std::cout << "n_left[" << i << "]: " << n_left[i] << ' ';
+	//std::cout << "n_right[" << i << "]: " << n_right[i] << '\n';
+	//std::cout << "q_left: " << q_left << ' ';	  
+	//std::cout << "q_right: " << q_right << '\n';	
+	//std::cout << "cost_left[" << i << "]: " << cost_left[i] << ' ';	
+	//std::cout << "cost_right[" << i << "]: " << cost_right[i] << '\n';	
+  }
+
+  // Compute decrease of impurity for each possible split
+  for (size_t i = 0; i < num_splits; ++i) {
+
+    // Stop if one child empty
+    if (n_left[i] == 0 || n_right[i] == 0) {
+      continue;
+    }
+
+	double decrease = mismatch_costs - (cost_left[i] + cost_right[i]);
+
+    // If better than before, use this
+    if (decrease > best_decrease) {
+      best_value = (possible_split_values[i] + possible_split_values[i + 1]) / 2;
+      best_varID = varID;
+      best_decrease = decrease;
+
+      // Use smaller value if average is numerically the same as the larger value
+      if (best_value == possible_split_values[i + 1]) {
+        best_value = possible_split_values[i];
+      }
+    }
+	//std::cout << "best_decrease: " << best_decrease << " with split value: " << best_value << '\n';
+  }
+}
+
+void TreeRegression::findBestSplitValueCMismatchUnordered(size_t nodeID, size_t varID, double mismatch_costs, size_t num_samples_node,
+    double& best_value, size_t& best_varID, double& best_decrease) {
+
+// dummy value
+double sum_node = mismatch_costs;
+	
+// Create possible split values
+  std::vector<double> factor_levels;
+  data->getAllValues(factor_levels, sampleIDs[nodeID], varID);
+
+// Try next variable if all equal for this
+  if (factor_levels.size() < 2) {
+    return;
+  }
+
+// Number of possible splits is 2^num_levels
+  size_t num_splits = (1 << factor_levels.size());
+
+// Compute decrease of impurity for each possible split
+// Split where all left (0) or all right (1) are excluded
+// The second half of numbers is just left/right switched the first half -> Exclude second half
+  for (size_t local_splitID = 1; local_splitID < num_splits / 2; ++local_splitID) {
+
+    // Compute overall splitID by shifting local factorIDs to global positions
+    size_t splitID = 0;
+    for (size_t j = 0; j < factor_levels.size(); ++j) {
+      if ((local_splitID & (1 << j))) {
+        double level = factor_levels[j];
+        size_t factorID = floor(level) - 1;
+        splitID = splitID | (1 << factorID);
+      }
+    }
+
+    // Initialize
+    double sum_right = 0;
+    size_t n_right = 0;
+
+    // Sum in right child
+    for (auto& sampleID : sampleIDs[nodeID]) {
+      double response = data->get(sampleID, dependent_varID);
+      double value = data->get(sampleID, varID);
+      size_t factorID = floor(value) - 1;
+
+      // If in right child, count
+      // In right child, if bitwise splitID at position factorID is 1
+      if ((splitID & (1 << factorID))) {
+        ++n_right;
+        sum_right += response;
+      }
+    }
+    size_t n_left = num_samples_node - n_right;
+
+    // Sum of squares
+    double sum_left = sum_node - sum_right;
+    double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
+
+    // If better than before, use this
+    if (decrease > best_decrease) {
+      best_value = splitID;
+      best_varID = varID;
+      best_decrease = decrease;
+    }
+  }
 }
 
 bool TreeRegression::findBestSplit(size_t nodeID, std::vector<size_t>& possible_split_varIDs) {

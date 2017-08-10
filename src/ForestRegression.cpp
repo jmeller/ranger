@@ -146,6 +146,12 @@ void ForestRegression::computePredictionErrorInternal() {
       double predicted_value = predictions[0][0][i];
       double real_value = data->get(i, dependent_varID);
       overall_prediction_error += (predicted_value - real_value) * (predicted_value - real_value);
+	  // new:
+	  /*if ((predicted_value - real_value) > 0){
+		  overall_prediction_error += 0.05 * (predicted_value - real_value)
+	  }else{
+		  overall_prediction_error += 0.95 * (real_value - predicted_value)
+	  }*/
     } else {
       predictions[0][0][i] = NAN;
     }
