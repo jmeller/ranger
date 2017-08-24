@@ -240,7 +240,6 @@ bool TreeRegression::findBestSplitCMismatch(size_t nodeID, std::vector<size_t>& 
     // Find best split value, if ordered consider all values as split values, else all 2-partitions
     if ((*is_ordered_variable)[varID]) {
 
-	std::cout << "varID is ordered" << '\n';
       // Use memory saving method if option set
       //if (memory_saving_splitting) {
         findBestSplitValueCMismatchSmallQ(nodeID, varID, mismatch_costs, num_samples_node, best_value, best_varID, best_decrease);
@@ -254,7 +253,6 @@ bool TreeRegression::findBestSplitCMismatch(size_t nodeID, std::vector<size_t>& 
         }
       }*/
     } else {
-		std::cout << "varID is unordered" << '\n';
       findBestSplitValueCMismatchUnordered(nodeID, varID, mismatch_costs, num_samples_node, best_value, best_varID, best_decrease);
     }
   }
